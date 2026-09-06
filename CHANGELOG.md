@@ -4,6 +4,14 @@ All notable changes to the dbsh project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.1.5] - 2026-09-06
+
+### Fixed
+
+- **SQLite module support** — `dbsh -m <module>` with SQLite now throws a clear error instead of creating invalid table names (`sqlite____migration_history`) that SQLite rejects. SQLite does not support database schemas; use PostgreSQL or SQL Server for multi-module setups.
+- **`-m` flag path resolution** — fixed double-append bug where `-m postgresql` with `scripts.path` already pointing to the `postgresql` subdirectory would resolve to `.../postgresql/postgresql/`, causing zero scripts to be found.
+- **Install script CRLF** — added `.gitattributes` to enforce LF line endings for shell scripts, preventing the `'\r': command not found` error when `install.sh` is downloaded from GitHub releases with Windows line endings.
+
 ## [2.1.4] - 2026-08-29
 
 ### Fixed

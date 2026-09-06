@@ -18,13 +18,26 @@ public sealed class SqliteProvider : IDatabaseProvider
         => new SqliteParameter("@" + name, value ?? DBNull.Value);
 
     public string GetTableName(string baseName, string? module = null)
-        => string.IsNullOrEmpty(module) ? baseName : $"\"{ValidateModule(module)}__{baseName}\"";
+    {
+        if (string.IsNullOrEmpty(module)) return baseName;
+        ValidateModule(module);
+        throw new InvalidOperationException(
+            $"SQLite does not support database schemas. " +
+            $"Cannot create module-prefixed table '{module}__{baseName}'. " +
+            $"Remove the -m flag or use a provider that supports schemas (PostgreSQL, SQL Server).");
+    }
 
     public string GetTrackingSchemaDdl(string? module = null)
     {
-        var h = GetTableName("__migration_history", module);
-        var l = GetTableName("__migration_lock", module);
-        var a = GetTableName("__migration_audit", module);
+        if (!string.IsNullOrEmpty(module))
+            throw new InvalidOperationException(
+                $"SQLite does not support database schemas. " +
+                $"Cannot create module-prefixed tracking tables for module '{module}'. " +
+                $"Remove the -m flag or use a provider that supports schemas (PostgreSQL, SQL Server).");
+
+        var h = GetTableName("__migration_history");
+        var l = GetTableName("__migration_lock");
+        var a = GetTableName("__migration_audit");
 
         return $"""
             CREATE TABLE IF NOT EXISTS {h} (
@@ -79,8 +92,13 @@ public sealed class SqliteProvider : IDatabaseProvider
 
     public string GetAcquireLockSql(string? module = null)
     {
-        ValidateModule(module);
-        var l = GetTableName("__migration_lock", module);
+        if (!string.IsNullOrEmpty(module))
+            throw new InvalidOperationException(
+                $"SQLite does not support database schemas. " +
+                $"Cannot use module-prefixed lock table for module '{module}'. " +
+                $"Remove the -m flag or use a provider that supports schemas (PostgreSQL, SQL Server).");
+
+        var l = GetTableName("__migration_lock");
         return $"""
             INSERT INTO {l} (id, lock_key, locked_by, locked_at_utc, expires_at_utc, environment, is_active)
             VALUES (@id, @lock_key, @locked_by, @locked_at_utc, @expires_at_utc, @environment, @true)

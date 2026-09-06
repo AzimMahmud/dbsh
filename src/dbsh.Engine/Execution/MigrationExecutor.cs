@@ -672,9 +672,21 @@ public sealed class MigrationExecutor
     private string ResolveScriptsPath(string? configuredPath)
     {
         var basePath = configuredPath ?? ResolveDefaultScriptsPath();
-        return string.IsNullOrEmpty(_module)
-            ? basePath
-            : Path.Combine(basePath, _module);
+        if (string.IsNullOrEmpty(_module))
+        {
+            return basePath;
+        }
+
+        var resolvedBase = Path.GetFullPath(basePath);
+
+        // If the configured path already ends with the module name, don't double-append.
+        var lastSegment = Path.GetFileName(resolvedBase.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.Equals(lastSegment, _module, StringComparison.OrdinalIgnoreCase))
+        {
+            return resolvedBase;
+        }
+
+        return Path.Combine(basePath, _module);
     }
 
     private static string ResolveDefaultScriptsPath()

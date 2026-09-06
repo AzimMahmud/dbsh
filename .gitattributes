@@ -1,0 +1,5 @@
+# Enforce LF line endings for shell scripts to prevent CRLF in releases
+*.sh text eol=lf
+*.bash text eol=lf
+install.sh text eol=lf
+publish.sh text eol=lf

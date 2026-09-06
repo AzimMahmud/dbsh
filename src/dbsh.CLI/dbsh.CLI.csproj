@@ -5,9 +5,9 @@
     <RootNamespace>dbsh.CLI</RootNamespace>
     <AssemblyName>dbsh</AssemblyName>
     <Description>dbsh - a database-agnostic migration tool for .NET (PostgreSQL, SQL Server, MySQL, SQLite).</Description>
-    <Version>2.1.4</Version>
-    <FileVersion>2.1.4.0</FileVersion>
-    <AssemblyVersion>2.1.4.0</AssemblyVersion>
+    <Version>2.1.5</Version>
+    <FileVersion>2.1.5.0</FileVersion>
+    <AssemblyVersion>2.1.5.0</AssemblyVersion>
 
     <PackAsTool>true</PackAsTool>
     <DebugType>none</DebugType>

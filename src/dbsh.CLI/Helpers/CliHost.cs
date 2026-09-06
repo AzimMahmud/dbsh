@@ -98,9 +98,10 @@ public sealed class CliHost
 
             if (!string.IsNullOrEmpty(module) && !provider.SupportsSchemas)
             {
-                ConsoleHelper.PrintWarning(
-                    $"{provider.Name} does not support database schemas. " +
-                    $"Tables will be created with prefix naming: `{module}__migration_history`");
+                throw new InvalidOperationException(
+                    $"Provider '{provider.Name}' does not support database schemas. " +
+                    $"The -m (--module) flag cannot be used with {provider.Name}. " +
+                    $"Remove the -m flag or use a provider that supports schemas (PostgreSQL, SQL Server).");
             }
 
             tracker = new RelationalMigrationTracker(provider, connectionString!, module);
@@ -171,8 +172,17 @@ public sealed class CliHost
             return resolved;
         }
 
-        var fullPath = Path.GetFullPath(Path.Combine(resolved, module));
         var resolvedBase = Path.GetFullPath(resolved);
+
+        // If the configured scripts.path already ends with the module name (e.g.
+        // "./Database/Migrations/postgresql" with -m postgresql), don't double-append.
+        var lastSegment = Path.GetFileName(resolvedBase.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.Equals(lastSegment, module, StringComparison.OrdinalIgnoreCase))
+        {
+            return resolvedBase;
+        }
+
+        var fullPath = Path.GetFullPath(Path.Combine(resolved, module));
 
         if (!fullPath.StartsWith(resolvedBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
             fullPath != resolvedBase)
