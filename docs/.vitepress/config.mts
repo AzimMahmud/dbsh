@@ -1,4 +1,9 @@
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import { defineConfig } from 'vitepress'
+
+const csproj = readFileSync(resolve(__dirname, '../../src/dbsh.CLI/dbsh.CLI.csproj'), 'utf-8')
+const version = csproj.match(/<Version>(.*?)<\/Version>/)?.[1] || '0.0.0'
 
 export default defineConfig({
   title: 'dbsh',
@@ -19,7 +24,7 @@ export default defineConfig({
       { text: 'Commands', link: '/commands/new' },
       { text: 'Reference', link: '/reference/global-options' },
       {
-        text: 'v2.1.4',
+        text: `v${version}`,
         items: [
           { text: 'Changelog', link: 'https://github.com/AzimMahmud/dbsh/blob/main/CHANGELOG.md' },
           { text: 'GitHub', link: 'https://github.com/AzimMahmud/dbsh' }
