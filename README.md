@@ -32,11 +32,13 @@ dbsh is a SQL-first database migration tool for .NET. You write plain `.sql` fil
 ## Features
 
 - **SQL-first** — Plain `.sql` files. No embedded DSL, no XML, no surprises.
+- **Flyway-style versioning** — `dbsh create` assigns the next auto-incrementing version (`001`, `002`, ...) across all script folders. Timestamps are opt-in.
+- **Live progress** — Migrations stream one line each (`✓ 001 CreateUsersTable (0.12s)`), Flyway/Django style.
 - **Multi-database** — PostgreSQL, SQL Server, MySQL, SQLite, Oracle, CockroachDB, YugabyteDB, and Aurora. Switch providers without changing your workflow.
 - **Safe by design** — Distributed locks, approval gates, deployment windows, and audit trails.
 - **CI-friendly** — Every command supports `--json` output and deterministic exit codes.
 - **Works offline** — Validate, plan, and scaffold without a database connection.
-- **Checksum integrity** — SHA-256 checksums detect when previously-applied scripts are edited in place.
+- **Checksum integrity** — SHA-256 checksums detect edited scripts (`Drifted`) and deleted scripts (`Missing`) in `dbsh status` and `dbsh plan`.
 
 ## Quick Start
 
@@ -47,8 +49,8 @@ curl -fsSL https://github.com/AzimMahmud/dbsh/releases/latest/download/install.s
 # Scaffold a project
 dbsh new --name MyApp --provider postgresql
 
-# Create a migration
-dbsh create --name CreateUsersTable --type schema
+# Create a migration (version picked automatically: V001, V002, ...)
+dbsh create --name CreateUsersTable
 
 # Validate & preview
 dbsh validate
@@ -56,6 +58,9 @@ dbsh plan
 
 # Deploy
 dbsh migrate -c "Host=localhost;Database=myapp;Username=postgres"
+
+# Undo — fails fast if a rollback script is missing
+dbsh rollback --target-version 002
 ```
 
 ## Installation
