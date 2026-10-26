@@ -35,7 +35,7 @@ public abstract class CliCommandBase<TSettings> : AsyncCommand<TSettings> where 
             WriteJson(new { success = false, error = message });
             return 1;
         }
-        ConsoleHelper.RenderException(new InvalidOperationException(message));
+        ConsoleHelper.PrintFatal(message);
         return 1;
     }
 

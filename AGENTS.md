@@ -24,7 +24,7 @@ dotnet test --filter "Category!=Integration"
 dotnet test tests/dbsh.Engine.Tests --filter "Category=Integration"
 ```
 
-Test count: 116 unit/SQLite tests across 13 test classes, plus 54 Docker-backed integration tests in `tests/dbsh.Engine.Tests/Integration/`.
+Test count: 140 unit/SQLite tests across 16 test classes, plus 54 Docker-backed integration tests in `tests/dbsh.Engine.Tests/Integration/`.
 
 ## Lint / Format
 

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using dbsh.CLI.Helpers;
 using dbsh.Core.Enums;
+using dbsh.Engine.Parsing;
 using Spectre.Console.Cli;
 
 namespace dbsh.CLI.Commands;
@@ -31,8 +32,16 @@ public sealed class CreateCommand : CliCommandBase<CreateCommand.Settings>
         [Description("Override the output directory")]
         public string? Dir { get; set; }
 
-        [CommandOption("-s|--sequence")]
-        [Description("Use a sequence version instead of a timestamp")]
+        [CommandOption("-V|--for-version")]
+        [Description("Version to target when creating a rollback (default: latest version without a rollback)")]
+        public string? ForVersion { get; set; }
+
+        [CommandOption("--timestamp")]
+        [Description("Use a timestamp version instead of the auto-incrementing number")]
+        public bool Timestamp { get; set; }
+
+        [CommandOption("-s|--sequence", IsHidden = true)]
+        [Description("Deprecated: auto-incrementing versions are now the default")]
         public bool Sequence { get; set; }
     }
 
@@ -45,28 +54,49 @@ public sealed class CreateCommand : CliCommandBase<CreateCommand.Settings>
             return Task.FromResult(Fail(settings, "The --name option is required."));
         }
 
+        if (settings.Sequence && !settings.Json)
+        {
+            ConsoleHelper.PrintWarning("The --sequence option is deprecated; auto-incrementing versions are now the default.");
+        }
+
         var (type, folder, prefix, templateName) = ResolveType(settings.Type);
 
         string version;
-        string fileName;
+        string displayVersion;
 
         if (type == MigrationType.Repeatable)
         {
             version = "R";
-            fileName = $"R__{name}.sql";
+            displayVersion = "R";
+        }
+        else if (type == MigrationType.Rollback)
+        {
+            var target = settings.ForVersion;
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                target = MigrationNaming.FindVersionMissingRollback(host.ScriptsPath);
+                if (target is null)
+                {
+                    return Task.FromResult(Fail(settings,
+                        "Every forward version already has a rollback script. Pass --for-version <version> to create one anyway."));
+                }
+            }
+
+            version = int.TryParse(target, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
+                ? MigrationNaming.FormatVersion(parsed)
+                : target;
+            displayVersion = version;
         }
         else
         {
-            var useTimestamp = !settings.Sequence;
-            version = useTimestamp
+            version = settings.Timestamp
                 ? DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture)
-                : NextSequence(host, folder, prefix);
-
-            var namePart = type == MigrationType.Rollback ? $"Rollback_{name}" : name;
-            fileName = $"{prefix}{version}__{namePart}.sql";
+                : MigrationNaming.NextVersion(host.ScriptsPath);
+            displayVersion = version;
         }
 
-        var displayFileName = type == MigrationType.Repeatable ? $"R__{name}" : $"{prefix}{version}__{(type == MigrationType.Rollback ? $"Rollback_{name}" : name)}";
+        var namePart = type == MigrationType.Rollback ? $"Rollback_{name}" : name;
+        var fileName = $"{prefix}{version}__{namePart}.sql";
 
         var outputDir = settings.Dir ?? Path.Combine(host.ScriptsPath, folder);
         Directory.CreateDirectory(outputDir);
@@ -92,7 +122,10 @@ public sealed class CreateCommand : CliCommandBase<CreateCommand.Settings>
         }
         else
         {
-            ConsoleHelper.PrintSuccess($"Created {type} migration '{displayFileName}'.");
+            var display = type == MigrationType.Rollback
+                ? $"{displayVersion} {namePart}"
+                : $"{displayVersion} {name}";
+            ConsoleHelper.PrintSuccess($"Created {type.ToString().ToLowerInvariant()} migration {display}.");
             ConsoleHelper.PrintKeyValue("file", fullPath);
         }
         return Task.FromResult(0);
@@ -106,25 +139,6 @@ public sealed class CreateCommand : CliCommandBase<CreateCommand.Settings>
         "repeatable" => (MigrationType.Repeatable, "Schema", "R", "repeatable_migration.sql"),
         _ => (MigrationType.Schema, "Schema", "V", "schema_migration.sql")
     };
-
-    private static string NextSequence(CliHost host, string folder, string prefix)
-    {
-        var dir = Path.Combine(host.ScriptsPath, folder);
-        var max = 0;
-        if (Directory.Exists(dir))
-        {
-            foreach (var file in Directory.EnumerateFiles(dir, $"{prefix}*__*.sql"))
-            {
-                var name = Path.GetFileNameWithoutExtension(file);
-                var digits = name[prefix.Length..].TakeWhile(char.IsDigit).ToArray();
-                if (digits.Length > 0 && int.TryParse(new string(digits), out var n) && n < 100000 && n > max)
-                {
-                    max = n;
-                }
-            }
-        }
-        return (max + 1).ToString("000", CultureInfo.InvariantCulture);
-    }
 
     private static string RenderTemplate(string template, string name, string author, string description)
         => template

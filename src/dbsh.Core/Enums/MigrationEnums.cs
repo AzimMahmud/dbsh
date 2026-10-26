@@ -29,3 +29,11 @@ public enum AuditAction
     Rollback,
     Repair
 }
+
+/// <summary>Lifecycle phase of a per-migration progress notification.</summary>
+public enum MigrationProgressKind
+{
+    Started,
+    Completed,
+    Failed
+}

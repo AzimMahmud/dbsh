@@ -47,6 +47,8 @@ public sealed class PlanCommand : CliCommandBase<PlanCommand.Settings>
                 success = true,
                 environment = plan.Environment,
                 count = plan.TotalCount,
+                drifted = dryRun.DriftedMigrations,
+                missing = dryRun.MissingMigrations,
                 migrations = plan.Items.Select(i => new
                 {
                     version = i.Version,
@@ -58,6 +60,20 @@ public sealed class PlanCommand : CliCommandBase<PlanCommand.Settings>
                 })
             });
             return 0;
+        }
+
+        if (dryRun.MissingMigrations.Count > 0)
+        {
+            ConsoleHelper.PrintWarning(
+                $"{dryRun.MissingMigrations.Count} recorded migration(s) are missing their script file: " +
+                $"{string.Join(", ", dryRun.MissingMigrations)}. Restore the file(s) or run 'dbsh repair'.");
+        }
+
+        if (dryRun.DriftedMigrations.Count > 0)
+        {
+            ConsoleHelper.PrintWarning(
+                $"{dryRun.DriftedMigrations.Count} applied migration(s) have checksum drift: " +
+                $"{string.Join(", ", dryRun.DriftedMigrations)}. Run 'dbsh repair' or deploy with --force.");
         }
 
         if (plan.TotalCount == 0)

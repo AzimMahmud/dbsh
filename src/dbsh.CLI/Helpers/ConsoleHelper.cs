@@ -1,3 +1,5 @@
+using dbsh.Core.Enums;
+using dbsh.Core.ValueObjects;
 using Spectre.Console;
 
 namespace dbsh.CLI.Helpers;
@@ -95,6 +97,50 @@ public static class ConsoleHelper
             .StartAsync($"[grey]{Markup.Escape(message)}...[/]", async _ => await action());
     }
 
+    /// <summary>
+    /// Runs a deploy/rollback while streaming one line per migration
+    /// (e.g. "✓ 001 CreateUsersTable (0.12s)") above a live spinner.
+    /// </summary>
+    public static async Task<T> RunWithProgress<T>(string verb, MigrationProgress progress, Func<Task<T>> action)
+    {
+        if (UiSuppressed)
+        {
+            return await action();
+        }
+
+        return await AnsiConsole.Status()
+            .AutoRefresh(true)
+            .Spinner(Spinner.Known.Dots)
+            .SpinnerStyle(Style.Parse(Theme.Primary))
+            .StartAsync($"[grey]{Markup.Escape(verb)}...[/]", async ctx =>
+            {
+                progress.Handler = evt =>
+                {
+                    switch (evt.Kind)
+                    {
+                        case MigrationProgressKind.Started:
+                            ctx.Status($"[grey]{Markup.Escape(verb)} [bold {Theme.Primary}]{Markup.Escape(evt.Version)}[/] [white]{Markup.Escape(evt.Name)}[/]...[/]");
+                            break;
+                        case MigrationProgressKind.Completed:
+                            AnsiConsole.MarkupLine(ProgressLine(evt, Theme.Check, null));
+                            break;
+                        case MigrationProgressKind.Failed:
+                            AnsiConsole.MarkupLine(ProgressLine(evt, Theme.Cross, $"[bold {Theme.Danger}]failed[/]"));
+                            break;
+                    }
+                };
+
+                return await action();
+            });
+    }
+
+    private static string ProgressLine(MigrationProgressEvent evt, string glyph, string? suffix)
+    {
+        var elapsed = evt.Elapsed.TotalSeconds > 0 ? $" [grey]({evt.Elapsed.TotalSeconds:0.00}s)[/]" : string.Empty;
+        var tail = string.IsNullOrEmpty(suffix) ? string.Empty : $" {suffix}";
+        return $"  {glyph} [bold {Theme.Primary}]{Markup.Escape(evt.Version)}[/] [white]{Markup.Escape(evt.Name)}[/]{elapsed}{tail}";
+    }
+
     public static void PrintMigrationTable(string title, IEnumerable<(string Version, string Name, string Type, string Status, string Detail)> rows)
     {
         var table = new Table()
@@ -179,6 +225,19 @@ public static class ConsoleHelper
         AnsiConsole.WriteLine();
     }
 
+    /// <summary>Renders an expected, user-facing failure - clean message, no internal exception type names.</summary>
+    public static void PrintFatal(string message)
+    {
+        AnsiConsole.WriteLine();
+        var panel = new Panel(new Markup($"[white]{Markup.Escape(message)}[/]"))
+            .Border(BoxBorder.Heavy)
+            .BorderStyle(Style.Parse(Theme.Danger))
+            .Header($" [{Theme.Danger}] error [/]", Justify.Left)
+            .Padding(1, 0);
+        AnsiConsole.Write(panel);
+        AnsiConsole.WriteLine();
+    }
+
     public static string StatusMarkup(string status) => status.Trim() switch
     {
         "Completed" or "Applied" or "Success" => $"[bold {Theme.Success}]{status}[/]",
@@ -186,8 +245,17 @@ public static class ConsoleHelper
         "Failed" => $"[bold {Theme.Danger}]{status}[/]",
         "RolledBack" or "Rolled Back" => $"[bold {Theme.Accent}]{status}[/]",
         "InProgress" or "In Progress" => $"[bold {Theme.Info}]{status}[/]",
+        "Drifted" => $"[bold {Theme.Warning}]{status}[/]",
+        "Missing" => $"[bold {Theme.Danger}]{status}[/]",
         _ => $"[grey]{Markup.Escape(status)}[/]"
     };
+
+    /// <summary>Renders an execution outcome as "001 Name (0.12s)" - version-first, no file names.</summary>
+    public static string FormatOutcome(MigrationOutcome outcome)
+    {
+        var elapsed = outcome.ElapsedMs > 0 ? $" ({outcome.ElapsedMs / 1000.0:0.00}s)" : string.Empty;
+        return $"{outcome.Version} {outcome.Name}{elapsed}";
+    }
 
     public static string GradientMarkup(string text, string fromHex, string toHex)
     {

@@ -14,6 +14,8 @@
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.300" />
     <!-- Pin the SQLite native lib to 3.50.3 (SQLite >= 3.50.2). The 2.1.x line bundles a vulnerable SQLite (CVE-2025-6965 / GHSA-2m69-gcr7-jv3q). -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
+    <!-- Pin the transitive System.Security.Cryptography.Pkcs (via Oracle.ManagedDataAccess.Core) to the patched 10.0.x line (GHSA-2fmv-rv2c-59x7 / GHSA-846f-f764-76mx). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,32 +1,35 @@
 # create
 
-Scaffold a new migration script from a template.
+Create a new migration script with the next auto-incrementing version.
 
 **Database required:** No
 
 ## Usage
 
 ```bash
-# Schema migration with timestamp version
-dbsh create --name CreateUsersTable --type schema --author jane
+# Schema migration - version picked automatically (001, 002, ...)
+dbsh create --name CreateUsersTable
 
-# Schema migration with sequence version (001, 002...)
-dbsh create --name AddEmailColumn --type schema --sequence
+# Schema migration with an author
+dbsh create --name CreateUsersTable --author jane
 
-# Data migration
-dbsh create --name SeedRoles --type data --author jane
+# Data migration (version numbering is global across all type folders)
+dbsh create --name SeedRoles --type data
 
 # Patch migration
 dbsh create --name FixIndexes --type patch
 
-# Rollback script
-dbsh create --name CreateUsersTable --type rollback
+# Rollback script - targets the latest version without a rollback
+dbsh create --name Rollback_CreateUsersTable --type rollback
 
-# Repeatable script
+# Rollback script for a specific version
+dbsh create --name Rollback_CreateUsersTable --type rollback --for-version 003
+
+# Repeatable script (re-runs whenever its content changes)
 dbsh create --name RefreshUserView --type repeatable
 
-# With metadata
-dbsh create --name CreateOrders --type schema --author jane --description "Orders and order_items tables"
+# Opt out of auto-incrementing versions and use a timestamp instead
+dbsh create --name CreateOrders --timestamp
 ```
 
 ## Options
@@ -38,15 +41,25 @@ dbsh create --name CreateOrders --type schema --author jane --description "Order
 | `--author` | `-a` | Author name for the metadata header |
 | `--description` | `-d` | Short description for the metadata header |
 | `--output` | `-o` | Override output directory |
-| `--sequence` | `-s` | Use sequence version (`001`, `002`) instead of timestamp |
+| `--for-version` | `-V` | Version to target when `--type rollback` (default: latest version without a rollback) |
+| `--timestamp` | | Use a timestamp version (`V20260617120000`) instead of the auto-incrementing number |
+| `--sequence` | `-s` | *(Deprecated)* Auto-incrementing versions are now the default |
+
+## Version numbering
+
+Versions are simple, globally-unique integers rendered zero-padded to three
+digits - the Flyway convention. The next version is computed from the highest
+version found anywhere under `Database/Migrations` (all type folders), so a
+data migration created after `Schema/V003` becomes `V004__Name.sql` and never
+collides with the `(version, environment)` uniqueness rule of the tracking schema.
 
 ## Generated filenames
 
 | Type | Pattern | Example |
 |------|---------|---------|
-| schema/data/patch | `V<version>__<Name>.sql` | `V20260617120000__CreateUsers.sql` |
-| schema (sequence) | `V<seq>__<Name>.sql` | `V001__CreateUsers.sql` |
-| rollback | `U<version>__Rollback_<Name>.sql` | `U001__Rollback_CreateUsers.sql` |
+| schema/data/patch | `V<version>__<Name>.sql` | `V004__CreateUsers.sql` |
+| schema (`--timestamp`) | `V<timestamp>__<Name>.sql` | `V20260617120000__CreateUsers.sql` |
+| rollback | `U<version>__Rollback_<Name>.sql` | `U003__Rollback_CreateUsers.sql` |
 | repeatable | `R__<Name>.sql` | `R__RefreshUserView.sql` |
 
 ## Generated file content
@@ -57,5 +70,5 @@ dbsh create --name CreateOrders --type schema --author jane --description "Order
 -- Created: 2026-06-17
 -- Description: Orders and order_items tables
 
--- TODO: Add your SQL migration here
+-- TODO: add your SQL here
 ```

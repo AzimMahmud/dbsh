@@ -38,6 +38,8 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
                 applied = status.Applied,
                 pending = status.Pending,
                 failed = status.Failed,
+                drifted = status.DriftedMigrations.Count,
+                missing = status.MissingMigrations.Count,
                 migrations = status.Records.Select(r => new
                 {
                     version = r.Version,
@@ -51,14 +53,24 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
             return 0;
         }
 
-        ConsoleHelper.PrintSummary("Summary", new[]
+        var summary = new List<(string Key, string Value, string Color)>
         {
             ("environment", status.Environment, Theme.Text),
             ("total", status.Total.ToString(), Theme.Text),
             ("applied", status.Applied.ToString(), Theme.Success),
             ("pending", status.Pending.ToString(), Theme.Warning),
             ("failed", status.Failed.ToString(), status.Failed == 0 ? Theme.Text : Theme.Danger)
-        });
+        };
+        if (status.DriftedMigrations.Count > 0)
+        {
+            summary.Add(("drifted", status.DriftedMigrations.Count.ToString(), Theme.Warning));
+        }
+        if (status.MissingMigrations.Count > 0)
+        {
+            summary.Add(("missing", status.MissingMigrations.Count.ToString(), Theme.Danger));
+        }
+
+        ConsoleHelper.PrintSummary("Summary", summary);
 
         if (status.Records.Count == 0)
         {
@@ -66,11 +78,25 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
             return 0;
         }
 
+        var drifted = status.DriftedMigrations.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = status.MissingMigrations.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         ConsoleHelper.PrintMigrationTable("Migrations",
-            status.Records.Select(r => (r.Version, r.Name, r.Type.ToString(), r.Status.ToString(),
-                r.Status == MigrationStatus.Failed
-                    ? (r.ErrorMessage ?? string.Empty)
-                    : (r.ExecutedAtUtc == default ? string.Empty : r.ExecutedAtUtc.ToString("u")))));
+            status.Records.Select(r =>
+            {
+                var state = missing.Contains(r.Version) ? "Missing"
+                    : drifted.Contains(r.Version) ? "Drifted"
+                    : r.Status == MigrationStatus.Completed ? "Applied"
+                    : r.Status.ToString();
+                var detail = state switch
+                {
+                    "Missing" => "script removed from disk",
+                    "Drifted" => "edited after apply",
+                    "Failed" => r.ErrorMessage ?? string.Empty,
+                    _ => r.ExecutedAtUtc == default ? string.Empty : r.ExecutedAtUtc.ToString("u")
+                };
+                return (r.Version, r.Name, r.Type.ToString(), state, detail);
+            }));
 
         return 0;
     }

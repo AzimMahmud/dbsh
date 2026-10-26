@@ -145,7 +145,19 @@ public sealed class MigrationExecutor
 
             await AuditSafe(context.Environment, AuditAction.DryRun, context.ExecutedBy,
                 $"{plan.TotalCount} migration(s) planned{driftNote}");
-            return DryRunResult.Success(plan);
+
+            var dryRun = DryRunResult.Success(plan);
+            foreach (var (version, _) in drift)
+            {
+                dryRun.DriftedMigrations.Add(version);
+            }
+
+            foreach (var version in await ComputeMissingMigrationsAsync(context.Environment, cancellationToken))
+            {
+                dryRun.MissingMigrations.Add(version);
+            }
+
+            return dryRun;
         }
         catch (Exception ex)
         {
@@ -196,7 +208,8 @@ public sealed class MigrationExecutor
         var locked = await _lockManager.AcquireAsync(context.Environment, lockKey, context.ExecutedBy, env.Migration.LockTimeoutSeconds, _module, cancellationToken);
         if (!locked)
         {
-            result.ErrorMessage = $"Could not acquire migration lock for environment '{context.Environment}'. Another deployment may be in progress.";
+            result.ErrorMessage = $"Could not acquire migration lock for environment '{context.Environment}'. Another deployment may be in progress. " +
+                                  "Check 'dbsh history' for recent activity and retry once it completes.";
             return result;
         }
 
@@ -271,6 +284,7 @@ public sealed class MigrationExecutor
                         BatchNumber = batchNumber
                     };
 
+                    ReportProgress(context.Progress, MigrationProgressKind.Started, migration.Version, migration.Name, result.TotalApplied + result.FailedMigrations.Count, pending.Count);
                     var execution = await _scriptExecutor.ExecuteAsync(_connectionString!, migration.Content, _commandTimeoutSeconds, cancellationToken);
                     record.ExecutionTimeMs = execution.ElapsedMs;
 
@@ -281,6 +295,14 @@ public sealed class MigrationExecutor
                         await _tracker.AddAsync(record, _module, cancellationToken);
                         result.AppliedMigrations.Add(migration.Version);
                         result.TotalApplied++;
+                        result.Outcomes.Add(new MigrationOutcome
+                        {
+                            Version = migration.Version,
+                            Name = migration.Name,
+                            ElapsedMs = execution.ElapsedMs,
+                            Success = true
+                        });
+                        ReportProgress(context.Progress, MigrationProgressKind.Completed, migration.Version, migration.Name, result.TotalApplied + result.FailedMigrations.Count - 1, pending.Count, execution.ElapsedMs);
                         _logger.LogInformation("Applied {Version} {Name} in {Ms}ms", migration.Version, migration.Name, execution.ElapsedMs);
                     }
                     else
@@ -289,6 +311,15 @@ public sealed class MigrationExecutor
                         record.ErrorMessage = execution.ErrorMessage;
                         await _tracker.AddAsync(record, _module, cancellationToken);
                         result.FailedMigrations.Add(migration.Version);
+                        result.Outcomes.Add(new MigrationOutcome
+                        {
+                            Version = migration.Version,
+                            Name = migration.Name,
+                            ElapsedMs = execution.ElapsedMs,
+                            Success = false,
+                            ErrorMessage = execution.ErrorMessage
+                        });
+                        ReportProgress(context.Progress, MigrationProgressKind.Failed, migration.Version, migration.Name, result.TotalApplied + result.FailedMigrations.Count - 1, pending.Count, execution.ElapsedMs, execution.ErrorMessage);
                         _logger.LogError("Migration {Version} failed: {Error}", migration.Version, execution.ErrorMessage);
 
                         if (context.StopOnFailure)
@@ -397,6 +428,20 @@ public sealed class MigrationExecutor
 
         var env = await _environmentProvider.GetEnvironmentAsync(request.Environment, cancellationToken);
 
+        // Fail fast before touching the database: refusing to start a rollback that is
+        // guaranteed to stop halfway is safer than rolling back only some targets.
+        var rollbacksPreview = DiscoverRollbacks();
+        var withoutScript = targets
+            .Where(t => !rollbacksPreview.Any(r => r.Version.Equals(t.Version, StringComparison.OrdinalIgnoreCase)))
+            .Select(t => t.Version)
+            .ToList();
+        if (withoutScript.Count > 0)
+        {
+            result.ErrorMessage = $"No rollback script found for migration(s): {string.Join(", ", withoutScript)}. " +
+                                  "Create the missing U-scripts with 'dbsh create --type rollback' first.";
+            return result;
+        }
+
         var module = _module ?? request.Module;
         var lockKey = string.IsNullOrEmpty(module)
             ? $"migration:{request.Environment}"
@@ -412,8 +457,11 @@ public sealed class MigrationExecutor
         try
         {
             var rollbacks = DiscoverRollbacks();
-            foreach (var target in targets)
+            for (var index = 0; index < targets.Count; index++)
             {
+                var target = targets[index];
+                ReportProgress(request.Progress, MigrationProgressKind.Started, target.Version, target.Name, index, targets.Count);
+
                 var rollback = rollbacks.FirstOrDefault(r => r.Version.Equals(target.Version, StringComparison.OrdinalIgnoreCase));
                 if (rollback is null)
                 {
@@ -426,6 +474,15 @@ public sealed class MigrationExecutor
                 var execution = await _scriptExecutor.ExecuteAsync(_connectionString!, rollback.Content, _commandTimeoutSeconds, cancellationToken);
                 if (!execution.IsSuccess)
                 {
+                    result.Outcomes.Add(new MigrationOutcome
+                    {
+                        Version = target.Version,
+                        Name = target.Name,
+                        ElapsedMs = execution.ElapsedMs,
+                        Success = false,
+                        ErrorMessage = execution.ErrorMessage
+                    });
+                    ReportProgress(request.Progress, MigrationProgressKind.Failed, target.Version, target.Name, index, targets.Count, execution.ElapsedMs, execution.ErrorMessage);
                     result.ErrorMessage = $"Rollback of '{target.Version}' failed: {execution.ErrorMessage}";
                     await AuditSafe(request.Environment, AuditAction.Rollback, request.ExecutedBy,
                         $"rollback incomplete: {target.Version} failed ({execution.ErrorMessage}); rolled back {result.RolledBackMigrations.Count}");
@@ -434,6 +491,14 @@ public sealed class MigrationExecutor
 
                 await _tracker.UpdateStatusAsync(request.Environment, target.Version, MigrationStatus.RolledBack, null, module, cancellationToken);
                 result.RolledBackMigrations.Add(target.Version);
+                result.Outcomes.Add(new MigrationOutcome
+                {
+                    Version = target.Version,
+                    Name = target.Name,
+                    ElapsedMs = execution.ElapsedMs,
+                    Success = true
+                });
+                ReportProgress(request.Progress, MigrationProgressKind.Completed, target.Version, target.Name, index, targets.Count, execution.ElapsedMs);
             }
 
             result.IsSuccess = true;
@@ -467,6 +532,11 @@ public sealed class MigrationExecutor
         foreach (var (version, _) in drift)
         {
             status.DriftedMigrations.Add(version);
+        }
+
+        foreach (var version in await ComputeMissingMigrationsAsync(environment, cancellationToken))
+        {
+            status.MissingMigrations.Add(version);
         }
 
         return status;
@@ -637,6 +707,56 @@ public sealed class MigrationExecutor
         }
 
         return applied.Take(Math.Max(1, request.Count));
+    }
+
+    /// <summary>
+    /// Emits a per-migration progress event when the caller supplied a receiver.
+    /// The engine stays UI-agnostic: progress is best-effort and never required.
+    /// </summary>
+    private static void ReportProgress(
+        IProgress<MigrationProgressEvent>? progress,
+        MigrationProgressKind kind,
+        string version,
+        string name,
+        int index,
+        int total,
+        long elapsedMs = 0,
+        string? errorMessage = null)
+    {
+        if (progress is null)
+        {
+            return;
+        }
+
+        progress.Report(new MigrationProgressEvent
+        {
+            Kind = kind,
+            Version = version,
+            Name = name,
+            Index = index,
+            Total = total,
+            Elapsed = TimeSpan.FromMilliseconds(elapsedMs),
+            ErrorMessage = errorMessage
+        });
+    }
+
+    /// <summary>
+    /// Returns versions recorded in history whose script file no longer exists on disk.
+    /// Skipped entirely when the scripts root is absent (nothing to compare against).
+    /// </summary>
+    private async Task<List<string>> ComputeMissingMigrationsAsync(string environment, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(_scriptsPath))
+        {
+            return new List<string>();
+        }
+
+        var records = await _tracker.GetAllAsync(environment, _module, cancellationToken);
+        var onDisk = GetCachedDiscovered().Select(m => m.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return records
+            .Where(r => !onDisk.Contains(r.ScriptName))
+            .Select(r => r.Version)
+            .ToList();
     }
 
     private async Task AuditSafe(string environment, AuditAction action, string performedBy, string details)

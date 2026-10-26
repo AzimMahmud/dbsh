@@ -52,14 +52,14 @@ Database/
 dbsh create --name CreateUsersTable --type schema --author jane
 ```
 
-This creates a file like `Database/Migrations/Schema/V20260617120000__CreateUsersTable.sql`:
+This creates `Database/Migrations/Schema/V002__CreateUsersTable.sql` (the scaffold's example migration is `V001`; the next number is picked automatically):
 
 ```sql
 -- Migration: CreateUsersTable
 -- Author: jane
 -- Created: 2026-06-17
 
--- TODO: Add your SQL migration here
+-- TODO: add your SQL here
 ```
 
 ## 3. Write SQL

@@ -13,7 +13,8 @@ Database/Migrations/Schema/V20260617120000__CreateOrders.sql
 ```
 
 - `V` = versioned (applied once)
-- Version can be a sequence (`001`, `002`) or a UTC timestamp (`20260617120000`)
+- Version is a globally-unique, auto-incrementing integer rendered zero-padded (`001`, `002`, ...). `dbsh create` picks the next free number across all type folders.
+- A UTC timestamp (`20260617120000`) is available via `dbsh create --timestamp` for teams that prefer date-ordered versions
 - `__` (double underscore) separates the version from the name
 - The name should be PascalCase, underscores allowed
 
@@ -74,3 +75,16 @@ If a previously-applied script is edited in place, the checksum changes, and `db
 
 1. Create a new migration instead of editing existing ones, or
 2. Use `dbsh repair` to clear the history, then re-apply
+
+## States
+
+`dbsh status` reports one state per migration:
+
+| State | Meaning |
+|-------|---------|
+| `Pending` | Script on disk, not yet applied |
+| `Applied` | Applied successfully |
+| `Failed` | Applied with errors (re-queue with `dbsh repair`) |
+| `RolledBack` | Undo script ran against it |
+| `Drifted` | Applied, but the file was edited afterwards |
+| `Missing` | Recorded in history, but the script file no longer exists on disk |

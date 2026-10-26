@@ -115,7 +115,12 @@ public sealed class MigrateCommand : CliCommandBase<MigrateCommand.Settings>
         };
 
         var stopwatch = Stopwatch.StartNew();
-        var result = await ConsoleHelper.RunWithSpinner($"Applying {plan.TotalCount} migration(s)", () => host.Executor.DeployAsync(deployContext));
+        var progress = new MigrationProgress();
+        deployContext.Progress = progress;
+        var result = await ConsoleHelper.RunWithProgress(
+            $"Applying {plan.TotalCount} migration(s)",
+            progress,
+            () => host.Executor.DeployAsync(deployContext));
         stopwatch.Stop();
 
         if (settings.Json)
@@ -127,6 +132,14 @@ public sealed class MigrateCommand : CliCommandBase<MigrateCommand.Settings>
                 applied = result.TotalApplied,
                 appliedMigrations = result.AppliedMigrations,
                 failedMigrations = result.FailedMigrations,
+                outcomes = result.Outcomes.Select(o => new
+                {
+                    version = o.Version,
+                    name = o.Name,
+                    elapsedMs = o.ElapsedMs,
+                    success = o.Success,
+                    error = o.ErrorMessage
+                }),
                 elapsedMs = stopwatch.ElapsedMilliseconds,
                 error = result.ErrorMessage
             });
@@ -142,13 +155,15 @@ public sealed class MigrateCommand : CliCommandBase<MigrateCommand.Settings>
             ("approver", approver ?? "n/a", Theme.Muted)
         });
 
-        if (result.AppliedMigrations.Count > 0)
+        var appliedOutcomes = result.Outcomes.Where(o => o.Success).ToList();
+        var failedOutcomes = result.Outcomes.Where(o => !o.Success).ToList();
+        if (appliedOutcomes.Count > 0)
         {
-            ConsoleHelper.PrintList("Applied", result.AppliedMigrations);
+            ConsoleHelper.PrintList("Applied", appliedOutcomes.Select(ConsoleHelper.FormatOutcome));
         }
-        if (result.FailedMigrations.Count > 0)
+        if (failedOutcomes.Count > 0)
         {
-            ConsoleHelper.PrintList("Failed", result.FailedMigrations);
+            ConsoleHelper.PrintList("Failed", failedOutcomes.Select(o => $"{o.Version} {o.Name}"));
         }
 
         if (result.IsSuccess)

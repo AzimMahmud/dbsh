@@ -4,6 +4,29 @@ All notable changes to the dbsh project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-26
+
+### Added
+
+- **Live migration progress** — `dbsh migrate` and `dbsh rollback` now stream one line per migration (`✓ 001 CreateUsersTable (0.12s)`) instead of a silent spinner, Django/Flyway style.
+- **Version-first output** — migration lists, tables and summaries display `001 CreateUsersTable` rather than raw file names; full paths appear only in error details.
+- **Missing-script detection** — `dbsh status` and `dbsh plan` now flag history rows whose script file no longer exists on disk (`Missing` state), alongside checksum drift (`Drifted` state).
+- **Rollback pre-flight check** — `dbsh rollback` fails fast with a clear message when a target version has no rollback script, before acquiring the lock or touching the database.
+- **Help examples** — every command's `--help` now shows real-world usage examples.
+- **Structured JSON outcomes** — `migrate`/`rollback` JSON output includes per-migration `outcomes` (version, name, elapsed, error); `status`/`plan` include `drifted`/`missing`.
+
+### Changed
+
+- **Auto-incrementing versions by default** — `dbsh create` now assigns the next global version (`001`, `002`, ...) across all type folders (Flyway convention), instead of a 14-digit timestamp. Use `--timestamp` to opt back in; `-s/--sequence` is deprecated (it is now the default).
+- **Rollback targeting** — `dbsh create --type rollback` now auto-targets the latest version without a rollback script; pin a specific version with `--for-version`.
+- **Cleaner error rendering** — expected command failures render as a plain `error` panel instead of exposing internal exception type names.
+- **Actionable lock errors** — lock-acquisition failures now suggest checking `dbsh history` for concurrent deployments.
+
+### Fixed
+
+- **Version collisions across folders** — creating a `data` migration after `Schema/V003` no longer restarts numbering at `001`; the next version is derived from the highest version in any location folder.
+- **Dependency vulnerability** — pinned transitive `System.Security.Cryptography.Pkcs` (via Oracle driver) to the patched 10.0.x line.
+
 ## [2.1.5] - 2026-09-06
 
 ### Fixed

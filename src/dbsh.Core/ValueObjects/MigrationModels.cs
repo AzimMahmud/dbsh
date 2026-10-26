@@ -30,6 +30,9 @@ public sealed class MigrationContext
     public bool Force { get; set; }
     public bool SkipApproval { get; set; }
     public string? Module { get; set; }
+
+    /// <summary>Optional per-migration progress receiver (UI-agnostic; the engine never requires it).</summary>
+    public IProgress<MigrationProgressEvent>? Progress { get; set; }
 }
 
 /// <summary>A request to roll back one or more migrations.</summary>
@@ -40,6 +43,34 @@ public sealed class RollbackRequest
     public string Environment { get; set; } = string.Empty;
     public string ExecutedBy { get; set; } = string.Empty;
     public string? Module { get; set; }
+
+    /// <summary>Optional per-migration progress receiver (UI-agnostic; the engine never requires it).</summary>
+    public IProgress<MigrationProgressEvent>? Progress { get; set; }
+}
+
+/// <summary>Per-migration progress notification raised while deploying or rolling back.</summary>
+public sealed class MigrationProgressEvent
+{
+    public MigrationProgressKind Kind { get; set; }
+    public string Version { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Zero-based position within the current run.</summary>
+    public int Index { get; set; }
+    /// <summary>Total migrations in the current run.</summary>
+    public int Total { get; set; }
+    /// <summary>Execution duration, populated for Completed/Failed events.</summary>
+    public TimeSpan Elapsed { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+/// <summary>Structured outcome for a single migration execution (deploy or rollback).</summary>
+public sealed class MigrationOutcome
+{
+    public string Version { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public long ElapsedMs { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 /// <summary>A single step inside an execution plan.</summary>
@@ -80,6 +111,12 @@ public sealed class DryRunResult
     public string? ErrorMessage { get; set; }
     public MigrationExecutionPlan? ExecutionPlan { get; set; }
 
+    /// <summary>Versions of applied migrations whose on-disk checksum no longer matches history.</summary>
+    public List<string> DriftedMigrations { get; } = new();
+
+    /// <summary>Versions recorded in history whose script file is no longer on disk.</summary>
+    public List<string> MissingMigrations { get; } = new();
+
     public static DryRunResult Success(MigrationExecutionPlan plan) => new() { IsSuccess = true, ExecutionPlan = plan };
     public static DryRunResult Failure(string error) => new() { IsSuccess = false, ErrorMessage = error };
 }
@@ -94,6 +131,7 @@ public sealed class DeployResult
     public List<string> FailedMigrations { get; set; } = new();
     public List<string> DriftedMigrations { get; set; } = new();
     public List<string> PendingRepeatables { get; set; } = new();
+    public List<MigrationOutcome> Outcomes { get; } = new();
     public TimeSpan Elapsed { get; set; }
 }
 
@@ -111,6 +149,7 @@ public sealed class RollbackResult
     public bool IsSuccess { get; set; }
     public string? ErrorMessage { get; set; }
     public List<string> RolledBackMigrations { get; } = new();
+    public List<MigrationOutcome> Outcomes { get; } = new();
 }
 
 /// <summary>Status summary for an environment.</summary>
@@ -125,6 +164,9 @@ public sealed class StatusResult
     public int Failed { get; set; }
     public int RolledBack { get; set; }
     public List<string> DriftedMigrations { get; set; } = new();
+
+    /// <summary>Versions recorded in history whose script file is no longer on disk.</summary>
+    public List<string> MissingMigrations { get; } = new();
 }
 
 /// <summary>Result of initialising the tracking schema.</summary>

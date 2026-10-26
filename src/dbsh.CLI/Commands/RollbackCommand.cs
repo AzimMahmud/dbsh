@@ -87,17 +87,32 @@ public sealed class RollbackCommand : CliCommandBase<RollbackCommand.Settings>
             }
         }
 
-        var result = await ConsoleHelper.RunWithSpinner("Rolling back migrations", () => host.Executor.RollbackAsync(request));
+        var progress = new MigrationProgress();
+        request.Progress = progress;
+        var result = await ConsoleHelper.RunWithProgress("Rolling back", progress, () => host.Executor.RollbackAsync(request));
 
         if (settings.Json)
         {
-            WriteJson(new { success = result.IsSuccess, rolledBack = result.RolledBackMigrations, error = result.ErrorMessage });
+            WriteJson(new
+            {
+                success = result.IsSuccess,
+                rolledBack = result.RolledBackMigrations,
+                outcomes = result.Outcomes.Select(o => new
+                {
+                    version = o.Version,
+                    name = o.Name,
+                    elapsedMs = o.ElapsedMs,
+                    success = o.Success,
+                    error = o.ErrorMessage
+                }),
+                error = result.ErrorMessage
+            });
             return result.IsSuccess ? 0 : 1;
         }
 
-        if (result.RolledBackMigrations.Count > 0)
+        if (result.Outcomes.Count > 0)
         {
-            ConsoleHelper.PrintList("Rolled back", result.RolledBackMigrations);
+            ConsoleHelper.PrintList("Rolled back", result.Outcomes.Where(o => o.Success).Select(ConsoleHelper.FormatOutcome));
         }
         if (result.IsSuccess)
         {
