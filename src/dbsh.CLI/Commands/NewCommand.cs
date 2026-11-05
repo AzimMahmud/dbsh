@@ -422,9 +422,9 @@ public sealed class NewCommand : CliCommandBase<NewCommand.Settings>
             var nextSteps = new Panel(
                 new Markup(
                     $"  {Theme.Step} [grey]Set [bold]$DB_CONNECTION_STRING[/] or edit [bold]Database/Config/migration.json[/][/]{Environment.NewLine}" +
-                    $"  {Theme.Step} [grey]Run [bold]dbsh create --name YourMigration --type schema[/][/]{Environment.NewLine}" +
-                    $"  {Theme.Step} [grey]Write your SQL in the generated file[/]{Environment.NewLine}" +
-                    $"  {Theme.Step} [grey]Run [bold]dbsh migrate -c \"$DB_CONNECTION_STRING\"[/][/]"))
+                    $"  {Theme.Step} [grey]Run [bold]dbsh init[/] to create the tracking tables[/]{Environment.NewLine}" +
+                    $"  {Theme.Step} [grey]Run [bold]dbsh create --name YourMigration[/] and write your SQL[/]{Environment.NewLine}" +
+                    $"  {Theme.Step} [grey]Run [bold]dbsh plan[/] to preview, then [bold]dbsh migrate[/] to apply[/]"))
                 .Border(BoxBorder.Rounded)
                 .BorderStyle(Style.Parse(Theme.Muted))
                 .Header($" [{Theme.Warning}] Next steps [/]", Justify.Left)

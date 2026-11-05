@@ -1,6 +1,7 @@
 using dbsh.Core.Enums;
 using dbsh.Core.ValueObjects;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace dbsh.CLI.Helpers;
 
@@ -23,7 +24,7 @@ public static class ConsoleHelper
         var info = new Grid()
             .AddColumn(new GridColumn().NoWrap().PadRight(2))
             .AddColumn()
-            .AddRow($"[bold {Theme.Primary}]providers[/]", $"[grey]PostgreSQL / SQL Server / MySQL / SQLite[/]");
+            .AddRow($"[bold {Theme.Primary}]providers[/]", $"[grey]PostgreSQL / SQL Server / MySQL / SQLite / Oracle[/]");
 
         AnsiConsole.Write(new Panel(info)
             .Border(BoxBorder.Rounded)
@@ -146,8 +147,7 @@ public static class ConsoleHelper
         var table = new Table()
             .Border(TableBorder.Rounded)
             .BorderStyle(Style.Parse(Theme.Muted))
-            .Title($"[bold {Theme.Primary}]{Markup.Escape(title)}[/]")
-            .Expand();
+            .Title($"[bold {Theme.Primary}]{Markup.Escape(title)}[/]");
 
         table.AddColumn(new TableColumn($"[{Theme.Warning}]Version[/]").RightAligned());
         table.AddColumn(new TableColumn($"[{Theme.Warning}]Name[/]").LeftAligned());
@@ -169,11 +169,49 @@ public static class ConsoleHelper
         AnsiConsole.WriteLine();
     }
 
+    /// <summary>Renders a simple table with the given column headers.</summary>
+    public static void PrintTable(string title, string[] headers, IEnumerable<string[]> rows)
+    {
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderStyle(Style.Parse(Theme.Muted))
+            .Title($"[bold {Theme.Primary}]{Markup.Escape(title)}[/]");
+
+        foreach (var header in headers)
+        {
+            table.AddColumn(new TableColumn($"[{Theme.Warning}]{Markup.Escape(header)}[/]").LeftAligned());
+        }
+
+        foreach (var row in rows)
+        {
+            table.AddRow(row.Select(c => (IRenderable)new Markup($"[white]{Markup.Escape(c)}[/]")).ToArray());
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+    }
+
+    /// <summary>Prints a "what to do next" line, e.g. <c>Next: dbsh migrate</c>.</summary>
+    public static void PrintNext(string description, string command) =>
+        AnsiConsole.MarkupLine($"  {Theme.Step} [grey]{Markup.Escape(description)}:[/] [bold {Theme.Primary}]{Markup.Escape(command)}[/]");
+
+    /// <summary>Formats a path relative to the current directory when it lives below it.</summary>
+    public static string RelativePath(string path)
+    {
+        var relative = Path.GetRelativePath(Directory.GetCurrentDirectory(), path);
+        return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? path : relative;
+    }
+
     public static void PrintSummary(string title, IEnumerable<(string Key, string Value, string Color)> rows)
     {
         var grid = new Grid()
             .AddColumn(new GridColumn().NoWrap().PadRight(2))
             .AddColumn();
+
+        rows = rows.ToList();
+        // Keep the panel at least as wide as its title so the header is never truncated.
+        var contentWidth = rows.Select(r => r.Key.Length + 2 + r.Value.Length).DefaultIfEmpty(0).Max();
+        var panelWidth = Math.Max(contentWidth + 4, title.Length + 6);
 
         foreach (var row in rows)
         {
@@ -186,7 +224,8 @@ public static class ConsoleHelper
             .Border(BoxBorder.Rounded)
             .BorderStyle(Style.Parse(Theme.Muted))
             .Header($" [{Theme.Primary}] {Markup.Escape(title)} [/]", Justify.Left)
-            .Padding(1, 0));
+            .Padding(1, 0)
+            .Width(panelWidth));
         AnsiConsole.WriteLine();
     }
 
@@ -215,15 +254,22 @@ public static class ConsoleHelper
 
     public static void RenderException(Exception ex)
     {
-        AnsiConsole.WriteLine();
-        var panel = new Panel(new Markup($"[white]{Markup.Escape(ex.Message)}[/]"))
-            .Border(BoxBorder.Heavy)
-            .BorderStyle(Style.Parse(Theme.Danger))
-            .Header($" [{Theme.Danger}] {Markup.Escape(ex.GetType().Name)} [/]", Justify.Left)
-            .Padding(1, 0);
-        AnsiConsole.Write(panel);
-        AnsiConsole.WriteLine();
+        var message = ex.Message;
+        if (LooksLikeMissingTrackingSchema(message))
+        {
+            message += $"{Environment.NewLine}{Environment.NewLine}The migration tracking tables do not exist on this database yet. Run 'dbsh init' first.";
+        }
+
+        PrintFatal(message);
     }
+
+    private static bool LooksLikeMissingTrackingSchema(string message) =>
+        message.Contains("__migration_", StringComparison.OrdinalIgnoreCase) &&
+        (message.Contains("no such table", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("doesn't exist", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("invalid object name", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("ORA-00942", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Renders an expected, user-facing failure - clean message, no internal exception type names.</summary>
     public static void PrintFatal(string message)

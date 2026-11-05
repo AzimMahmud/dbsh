@@ -59,6 +59,12 @@ public sealed class CreateCommand : CliCommandBase<CreateCommand.Settings>
             ConsoleHelper.PrintWarning("The --sequence option is deprecated; auto-incrementing versions are now the default.");
         }
 
+        if (!ValidTypes.Contains(settings.Type, StringComparer.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(Fail(settings,
+                $"Unknown migration type '{settings.Type}'. Use one of: {string.Join(", ", ValidTypes)}."));
+        }
+
         var (type, folder, prefix, templateName) = ResolveType(settings.Type);
 
         string version;
@@ -126,10 +132,13 @@ public sealed class CreateCommand : CliCommandBase<CreateCommand.Settings>
                 ? $"{displayVersion} {namePart}"
                 : $"{displayVersion} {name}";
             ConsoleHelper.PrintSuccess($"Created {type.ToString().ToLowerInvariant()} migration {display}.");
-            ConsoleHelper.PrintKeyValue("file", fullPath);
+            ConsoleHelper.PrintKeyValue("file", ConsoleHelper.RelativePath(fullPath));
+            ConsoleHelper.PrintNext("Write your SQL, then check it", "dbsh validate");
         }
         return Task.FromResult(0);
     }
+
+    private static readonly string[] ValidTypes = { "schema", "data", "patch", "rollback", "repeatable" };
 
     private static (MigrationType Type, string Folder, string Prefix, string Template) ResolveType(string type) => type.ToLowerInvariant() switch
     {

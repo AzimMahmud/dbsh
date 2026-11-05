@@ -46,10 +46,14 @@ public sealed class InfoCommand : CliCommandBase<InfoCommand.Settings>
             {
                 ("provider", host.Config.Provider, Theme.Text),
                 ("config version", host.Config.Version, Theme.Text),
-                ("tracking table", $"{host.Config.TrackingSchema}.{host.Config.TrackingTable}", Theme.Text),
+                ("tracking table", host.Config.Provider.Equals("sqlite", StringComparison.OrdinalIgnoreCase)
+                    ? host.Config.TrackingTable
+                    : $"{host.Config.TrackingSchema}.{host.Config.TrackingTable}", Theme.Text),
                 ("batch size", host.Config.BatchSize.ToString(), Theme.Text),
                 ("command timeout", $"{host.Config.CommandTimeoutSeconds}s", Theme.Text),
-                ("approval envs", string.Join(", ", host.Config.RequireApprovalEnvironments), Theme.Warning)
+                ("approval envs", host.Config.RequireApprovalEnvironments.Count == 0
+                    ? "none"
+                    : string.Join(", ", host.Config.RequireApprovalEnvironments), Theme.Warning)
             });
         }
 
@@ -57,13 +61,18 @@ public sealed class InfoCommand : CliCommandBase<InfoCommand.Settings>
         {
             ("base path", host.BasePath, Theme.Muted),
             ("scripts path", host.ScriptsPath, Theme.Muted),
-            ("mode", host.IsLive ? $"live ({host.ProviderName})" : "offline (in-memory)", host.IsLive ? Theme.Success : Theme.Warning),
+            ("mode", host.IsLive ? $"live ({host.ProviderName})" : "offline - no connection string found", host.IsLive ? Theme.Success : Theme.Warning),
             ("environment", host.EnvironmentName, Theme.Text),
             ("module", host.Module ?? "(default)", host.Module is null ? Theme.Muted : Theme.Text)
         });
 
         var environments = host.ConfigLoader.GetAvailableEnvironments();
         ConsoleHelper.PrintList("Environments", environments.Count == 0 ? new[] { "(none found)" } : environments);
+
+        if (!host.IsLive)
+        {
+            ConsoleHelper.PrintNext("Connect to a database with", "dbsh status -c \"<connection string>\"  (or set DB_CONNECTION_STRING)");
+        }
 
         return Task.FromResult(0);
     }

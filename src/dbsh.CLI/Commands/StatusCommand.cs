@@ -28,15 +28,23 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
         var status = await ConsoleHelper.RunWithSpinner("Querying migration history",
             () => host.Executor.GetStatusAsync(host.EnvironmentName));
 
+        // The tracking table only knows about scripts that were attempted; scripts that are
+        // still waiting on disk have to be added so "pending" is accurate.
+        var recorded = status.Records.Select(r => r.Version).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var waiting = (await host.Executor.GetPendingAsync(host.EnvironmentName))
+            .Where(i => string.Equals(i.Version, "R", StringComparison.OrdinalIgnoreCase) || !recorded.Contains(i.Version))
+            .ToList();
+        var pendingTotal = status.Pending + waiting.Count;
+
         if (settings.Json)
         {
             WriteJson(new
             {
                 success = true,
                 environment = status.Environment,
-                total = status.Total,
+                total = status.Total + waiting.Count,
                 applied = status.Applied,
-                pending = status.Pending,
+                pending = pendingTotal,
                 failed = status.Failed,
                 drifted = status.DriftedMigrations.Count,
                 missing = status.MissingMigrations.Count,
@@ -48,7 +56,15 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
                     status = r.Status.ToString(),
                     executedAtUtc = r.ExecutedAtUtc,
                     executionTimeMs = r.ExecutionTimeMs
-                })
+                }).Concat(waiting.Select(i => new
+                {
+                    version = i.Version,
+                    name = i.Name,
+                    type = i.Type.ToString(),
+                    status = "Pending",
+                    executedAtUtc = default(DateTime),
+                    executionTimeMs = 0L
+                }))
             });
             return 0;
         }
@@ -56,9 +72,9 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
         var summary = new List<(string Key, string Value, string Color)>
         {
             ("environment", status.Environment, Theme.Text),
-            ("total", status.Total.ToString(), Theme.Text),
-            ("applied", status.Applied.ToString(), Theme.Success),
-            ("pending", status.Pending.ToString(), Theme.Warning),
+            ("total", (status.Total + waiting.Count).ToString(), Theme.Text),
+            ("applied", status.Applied.ToString(), status.Applied == 0 ? Theme.Muted : Theme.Success),
+            ("pending", pendingTotal.ToString(), pendingTotal == 0 ? Theme.Muted : Theme.Warning),
             ("failed", status.Failed.ToString(), status.Failed == 0 ? Theme.Text : Theme.Danger)
         };
         if (status.DriftedMigrations.Count > 0)
@@ -72,17 +88,16 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
 
         ConsoleHelper.PrintSummary("Summary", summary);
 
-        if (status.Records.Count == 0)
+        if (status.Records.Count == 0 && waiting.Count == 0)
         {
-            ConsoleHelper.PrintInfo("No migrations have been recorded for this environment yet.");
+            ConsoleHelper.PrintInfo("No migration scripts found and none recorded for this environment.");
             return 0;
         }
 
         var drifted = status.DriftedMigrations.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missing = status.MissingMigrations.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        ConsoleHelper.PrintMigrationTable("Migrations",
-            status.Records.Select(r =>
+        var rows = status.Records.Select(r =>
             {
                 var state = missing.Contains(r.Version) ? "Missing"
                     : drifted.Contains(r.Version) ? "Drifted"
@@ -96,7 +111,28 @@ public sealed class StatusCommand : CliCommandBase<StatusCommand.Settings>
                     _ => r.ExecutedAtUtc == default ? string.Empty : r.ExecutedAtUtc.ToString("u")
                 };
                 return (r.Version, r.Name, r.Type.ToString(), state, detail);
-            }));
+            })
+            .Concat(waiting.Select(i => (i.Version, i.Name, i.Type.ToString(), "Pending", "not applied yet")))
+            .ToList();
+
+        ConsoleHelper.PrintMigrationTable("Migrations", rows);
+
+        if (status.Failed > 0)
+        {
+            ConsoleHelper.PrintNext("Fix the script, then re-queue the failed migration", "dbsh repair");
+        }
+        else if (status.DriftedMigrations.Count > 0 || status.MissingMigrations.Count > 0)
+        {
+            ConsoleHelper.PrintWarning("Applied scripts no longer match the files on disk. Review them before deploying.");
+        }
+        else if (pendingTotal > 0)
+        {
+            ConsoleHelper.PrintNext("Preview, then apply the pending migrations", "dbsh plan  /  dbsh migrate");
+        }
+        else
+        {
+            ConsoleHelper.PrintSuccess("Database is up to date.");
+        }
 
         return 0;
     }

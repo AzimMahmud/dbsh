@@ -90,7 +90,7 @@ public sealed class MigrateCommand : CliCommandBase<MigrateCommand.Settings>
         var approver = ResolveApprover(settings, environment);
         if (environment.Migration.RequireApproval && string.IsNullOrWhiteSpace(approver))
         {
-            return Fail(settings, "This environment requires approval. Provide --approver or confirm interactively.");
+            return Fail(settings, $"Environment '{host.EnvironmentName}' requires approval. Re-run with --approver <name>.");
         }
 
         if (!settings.Json && !settings.AssumeYes)
@@ -173,6 +173,7 @@ public sealed class MigrateCommand : CliCommandBase<MigrateCommand.Settings>
         }
 
         ConsoleHelper.PrintError(result.ErrorMessage ?? "Deployment completed with errors.");
+        ConsoleHelper.PrintNext("Fix the failing script, then re-queue it", "dbsh repair");
         return 1;
     }
 

@@ -63,7 +63,7 @@ public abstract class CliCommandBase<TSettings> : AsyncCommand<TSettings> where 
         {
             return 0;
         }
-        return Fail(settings, "This command requires a live database connection. Set a connection string via --connection-string, the DB_CONNECTION_STRING environment variable, or migration.json.");
+        return Fail(settings, "No database connection configured. Pass --connection-string, set DB_CONNECTION_STRING, or add it to migration.json / the environment file.");
     }
 
     protected void WriteJson(object value)

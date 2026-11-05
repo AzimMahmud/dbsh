@@ -56,8 +56,15 @@ public sealed class HistoryCommand : CliCommandBase<HistoryCommand.Settings>
             return 0;
         }
 
-        ConsoleHelper.PrintMigrationTable("Audit entries",
-            entries.Select(e => (e.PerformedAtUtc.ToString("yyyy-MM-dd HH:mm"), e.Action.ToString(), e.PerformedBy, "Logged", e.Details ?? string.Empty)));
+        ConsoleHelper.PrintTable($"Audit entries (latest {entries.Count})",
+            new[] { "When (UTC)", "Action", "User", "Details" },
+            entries.Select(e => new[]
+            {
+                e.PerformedAtUtc.ToString("yyyy-MM-dd HH:mm:ss"),
+                e.Action.ToString(),
+                e.PerformedBy,
+                e.Details ?? string.Empty
+            }));
 
         return 0;
     }

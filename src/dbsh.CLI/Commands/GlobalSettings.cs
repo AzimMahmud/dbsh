@@ -9,7 +9,7 @@ namespace dbsh.CLI.Commands;
 public abstract class GlobalSettings : CommandSettings
 {
     [CommandOption("-e|--environment")]
-    [Description("Target environment")]
+    [Description("Target environment name (default: local)")]
     public string Environment { get; set; } = "local";
 
     [CommandOption("-p|--provider")]
@@ -29,11 +29,11 @@ public abstract class GlobalSettings : CommandSettings
     public string? LegacyConfig { get; set; }
 
     [CommandOption("-i|--in-memory")]
-    [Description("Force offline in-memory mode (no database)")]
+    [Description("Run offline against an in-memory store (no database; for testing)")]
     public bool UseInMemory { get; set; }
 
     [CommandOption("-y|--yes")]
-    [Description("Skip interactive prompts")]
+    [Description("Answer yes to confirmation prompts (non-interactive)")]
     public bool AssumeYes { get; set; }
 
     // Declared so the help text exposes --no-color. The actual suppression happens
@@ -44,7 +44,7 @@ public abstract class GlobalSettings : CommandSettings
     public bool NoColor { get; set; }
 
     [CommandOption("-j|--json")]
-    [Description("Emit machine-readable JSON")]
+    [Description("Print machine-readable JSON instead of formatted output")]
     public bool Json { get; set; }
 
     [CommandOption("-v|--verbose")]

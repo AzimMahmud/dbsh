@@ -542,6 +542,25 @@ public sealed class MigrationExecutor
         return status;
     }
 
+    /// <summary>
+    /// Lists scripts on disk that have not been applied yet. Unlike <see cref="DryRunAsync"/>
+    /// this is a pure read: it writes nothing to the audit log.
+    /// </summary>
+    public async Task<IReadOnlyList<MigrationExecutionItem>> GetPendingAsync(string environment, CancellationToken cancellationToken = default)
+    {
+        var pending = await ComputePendingAsync(environment, cancellationToken);
+        return pending.Select(m => new MigrationExecutionItem
+        {
+            Version = m.Version,
+            Name = m.Name,
+            ScriptPath = m.FilePath,
+            Hash = m.Hash,
+            Type = m.Type,
+            Category = m.Category,
+            HasRollback = HasRollbackFor(m.Version)
+        }).ToArray();
+    }
+
     /// <summary>Returns recent audit entries for an environment.</summary>
     public Task<IReadOnlyList<MigrationAuditEntry>> GetHistoryAsync(string environment, int limit, CancellationToken cancellationToken = default)
         => _auditLogger.GetHistoryAsync(environment, limit, _module, cancellationToken);
