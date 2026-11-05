@@ -102,8 +102,8 @@ public class ConfigLoaderTests : IDisposable
     [Fact]
     public void LoadMigrationConfig_EnvVarExpansion_ConnectionString()
     {
-        Environment.SetEnvironmentVariable("dbsh_TEST_CS", "Host=expanded;Database=test;");
-        _envVarsToRestore.Add("dbsh_TEST_CS");
+        Environment.SetEnvironmentVariable("DBSH_TEST_CS", "Host=expanded;Database=test;");
+        _envVarsToRestore.Add("DBSH_TEST_CS");
 
         WriteMigrationConfig(@"{
             ""migration"": {
@@ -177,8 +177,8 @@ public class ConfigLoaderTests : IDisposable
     [Fact]
     public void LoadEnvironment_EnvVarExpansion_HostField()
     {
-        Environment.SetEnvironmentVariable("dbsh_TEST_HOST", "envhost");
-        _envVarsToRestore.Add("dbsh_TEST_HOST");
+        Environment.SetEnvironmentVariable("DBSH_TEST_HOST", "envhost");
+        _envVarsToRestore.Add("DBSH_TEST_HOST");
 
         WriteEnvironmentConfig("qa", @"{
             ""database"": { ""host"": ""${DBSH_TEST_HOST}"" }

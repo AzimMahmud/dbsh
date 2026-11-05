@@ -145,7 +145,7 @@ public sealed class NewCommand : CliCommandBase<NewCommand.Settings>
         // ── Database/Config/environments/*.json ─────────────────────────
         var environments = new[]
         {
-            ("local", "DB_CONNECTION_STRING", true, 30, 10),
+            ("local", "DB_CONNECTION_STRING", false, 30, 10),
             ("development", "DB_CONNECTION_STRING", false, 60, 10),
             ("staging", "DB_CONNECTION_STRING", false, 120, 5),
             ("production", "PROD_DB_CONNECTION_STRING", true, 300, 5),
