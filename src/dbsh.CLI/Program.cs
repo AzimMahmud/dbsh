@@ -95,7 +95,7 @@ if (noColor)
 }
 
 // Suppress interactive UI when --json is active.
-ConsoleHelper.UiSuppressed = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+ConsoleHelper.UiSuppressed = args.Any(a => a.Equals("--json", StringComparison.OrdinalIgnoreCase) || a == "-j");
 
 try
 {

@@ -220,12 +220,13 @@ public static class ConsoleHelper
                 new Markup($"[{row.Color}]{Markup.Escape(row.Value)}[/]"));
         }
 
-        AnsiConsole.Write(new Panel(grid)
+        var panel = new Panel(grid)
             .Border(BoxBorder.Rounded)
             .BorderStyle(Style.Parse(Theme.Muted))
             .Header($" [{Theme.Primary}] {Markup.Escape(title)} [/]", Justify.Left)
-            .Padding(1, 0)
-            .Width(panelWidth));
+            .Padding(1, 0);
+        panel.Width = panelWidth;
+        AnsiConsole.Write(panel);
         AnsiConsole.WriteLine();
     }
 
